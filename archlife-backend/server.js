@@ -277,15 +277,36 @@ function normalizeOllamaBase(url) {
 }
 
 async function callLocalQwen(prompt) {
+  // archlife-llmサービスをまだデプロイしていない環境では OLLAMA_URL が未設定になる。
+  // その場合は接続を試みず、即座にわかりやすいエラーで返す(でないと存在しないホストへの
+  // 接続待ちでリクエストがハングし、ユーザーには「反応がない」ように見えてしまう)。
+  if (!process.env.OLLAMA_URL) {
+    throw new Error(
+      "ローカルAIは現在利用できません(自己ホストLLMは未デプロイです)。外部AI(Claude/GPT)を有効にしてお試しください。"
+    );
+  }
+
   const base = normalizeOllamaBase(process.env.OLLAMA_URL);
   // Renderの構成ではGPUが使えないため、CPUでも現実的な速度で動く小型モデルを既定にしている。
   // AWS(EC2+GPU)版で使っていた7Bクラスに戻したい場合はOLLAMA_MODELで上書きする。
   const model = process.env.OLLAMA_MODEL || "qwen3:8b";
-  const r = await fetch(`${base}/api/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, prompt, stream: false }),
-  });
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000); // CPU推論は遅いため長めに確保
+  let r;
+  try {
+    r = await fetch(`${base}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, prompt, stream: false }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error("ローカルLLMの応答がタイムアウトしました");
+    throw new Error("ローカルLLMに接続できませんでした");
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!r.ok) throw new Error(`ローカルLLMエラー (status ${r.status})`);
   const data = await r.json();
   if (!data.response) throw new Error("ローカルLLMから応答がありませんでした");

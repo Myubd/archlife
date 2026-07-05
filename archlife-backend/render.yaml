@@ -1,8 +1,15 @@
 # Render Blueprint (render.yaml)
 # https://render.com/docs/blueprint-spec
 #
+# 現状: archlife-llm(自己ホストLLM)はまだデプロイしない。
+# 理由: ローカルLLMは「低スペック端末 かつ 外部APIに同意しないユーザー」だけが使う
+# 経路であり(高スペック端末は端末内WebLLM、それ以外は外部APIへのオプトイン)、
+# 3経路のうち一番細いケースにしか使われない。利用者が増えて実際に需要が見えてから
+# archlife-llmサービスを追加する方針にした(その際はこのファイルに pserv を戻し、
+# OLLAMA_URL の fromService 参照を復活させる)。
+#
 # このファイルをリポジトリのルートに置いて "New +" > "Blueprint" から読み込むと、
-# APIサーバーとローカルLLMサービスをまとめてデプロイできる。
+# APIサーバーをデプロイできる。
 # Neonのデータベース接続文字列(DATABASE_URL)は、Renderが管理するDBではないため
 # ダッシュボード側で環境変数として手動設定する(下記 sync: false の項目)。
 
@@ -12,7 +19,7 @@ services:
     name: archlife-backend
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: starter
+    plan: free # 課金なしで動作確認するため。一定時間アクセスがないとスリープする点に注意。
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -25,24 +32,24 @@ services:
         # 未設定だと全オリジン許可にフォールバックするため、本番では必ず設定すること。
         sync: false
       - key: OLLAMA_URL
-        fromService:
-          type: pserv
-          name: archlife-llm
-          property: hostport
+        # archlife-llmサービスをまだデプロイしていないため、意図的に未設定のままにする。
+        # server.js側は OLLAMA_URL が未設定の場合、接続を試みずに即座に
+        # 「ローカルAIは現在利用できません」というエラーを返す(タイムアウト待ちをしない)。
+        # 後日 archlife-llm を追加する際は、ここを
+        #   fromService: { type: pserv, name: archlife-llm, property: hostport }
+        # に戻すこと。
+        sync: false
       - key: OLLAMA_MODEL
-        # qwen3:8b は8Bパラメータで、starterプラン(CPUのみ・メモリも限られる)だと
-        # 応答がかなり遅い/メモリ不足で落ちる可能性がある。実用に耐えない場合は
-        # qwen2.5:1.5b-instruct(軽量モデル)に戻すか、上位プランを検討する。
         value: qwen3:8b
       - key: ANTHROPIC_API_KEY
         sync: false # 外部APIを使う場合のみダッシュボードで設定。空なら常にローカルLLMのみ。
       - key: OPENAI_API_KEY
         sync: false
 
-  # ---- ローカルLLM (非公開。archlife-backendからのみ到達可能) ----
-  - type: pserv
-    name: archlife-llm
-    runtime: docker
-    dockerfilePath: ./llm-service/Dockerfile
-    dockerContext: ./llm-service
-    plan: starter # CPUプラン。応答が遅い場合はより上位のプランを検討。
+  # ---- ローカルLLM (現在は未使用。需要が見えたら以下を有効化する) ----
+  # - type: pserv
+  #   name: archlife-llm
+  #   runtime: docker
+  #   dockerfilePath: ./llm-service/Dockerfile
+  #   dockerContext: ./llm-service
+  #   plan: starter # CPUプラン。応答が遅い場合はより上位のプランを検討。
