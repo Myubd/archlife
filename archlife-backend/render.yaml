@@ -19,6 +19,11 @@ services:
         sync: false # NeonのConnection Stringをダッシュボードで設定する
       - key: PGSSLMODE
         value: require
+      - key: FRONTEND_ORIGIN
+        # CORSで許可するオリジン。カンマ区切りで複数指定可。
+        # 例: "https://archlife.vercel.app,http://localhost:5173"
+        # 未設定だと全オリジン許可にフォールバックするため、本番では必ず設定すること。
+        sync: false
       - key: OLLAMA_URL
         fromService:
           type: pserv

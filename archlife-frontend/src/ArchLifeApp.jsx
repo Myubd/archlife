@@ -62,10 +62,18 @@ function getOrCreateAnonId() {
 function getOrCreatePassphrase() {
   let p = localStorage.getItem(PASSPHRASE_KEY);
   if (!p) {
-    p =
-      window.prompt(
+    // Electron(file://)では window.prompt() が例外を投げたり何も表示せず失敗することがある。
+    // ここで処理が止まると暗号化キーが作れず、以降すべての保存/読み込みが無言で失敗してしまうため、
+    // 失敗時は既定のパスフレーズにフォールバックして必ず処理を継続させる。
+    let entered = null;
+    try {
+      entered = window.prompt(
         "初回設定: データを暗号化するためのパスフレーズを決めてください。\n(忘れると復元できません。他の端末と同期したい場合は同じものを使ってください)"
-      ) || "please-change-this-passphrase";
+      );
+    } catch (err) {
+      entered = null;
+    }
+    p = entered || "please-change-this-passphrase";
     localStorage.setItem(PASSPHRASE_KEY, p);
   }
   return p;

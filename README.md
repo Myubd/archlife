@@ -3,7 +3,7 @@
 ## フォルダ構成
 
 ```
-archlife-project/
+ArchLife/
 ├── start-all.bat     ← これをダブルクリックで起動(DB + API + フロント。AIなし)
 ├── start-ai.bat      ← ローカルAI(Ollama)を使いたい時だけ実行
 ├── stop-all.bat      ← 全部停止

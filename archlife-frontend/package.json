@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:electron": "cross-env VITE_API_BASE_URL=http://localhost:8080 vite build",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -16,6 +17,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
+    "cross-env": "^7.0.3",
     "vite": "^5.4.1"
   }
 }

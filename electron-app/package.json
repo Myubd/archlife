@@ -1,0 +1,54 @@
+{
+  "name": "archlifeos-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ArchLifeOS デスクトップ版(Electron)。ダブルクリックだけでインストール・起動できるようにする配布用ラッパー。",
+  "author": "Myubd",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Myubd/archlife.git"
+  },
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "build": "electron-builder",
+    "release": "electron-builder --publish always"
+  },
+  "devDependencies": {
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.archlifeos.desktop",
+    "productName": "ArchLifeOS",
+    "asar": true,
+    "files": ["main.js"],
+    "extraResources": [
+      {
+        "from": "../archlife-backend",
+        "to": "archlife-backend",
+        "filter": ["**/*", "!.env", "!.env.local", "!data/**"]
+      },
+      {
+        "from": "../archlife-frontend/dist",
+        "to": "archlife-frontend/dist"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github"
+      }
+    ]
+  }
+}

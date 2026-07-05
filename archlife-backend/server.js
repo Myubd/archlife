@@ -10,12 +10,76 @@
 
 const express = require("express");
 const cors = require("cors");
+const rateLimit = require("express-rate-limit");
 const { Pool } = require("pg");
 const fetch = require("node-fetch");
 
 const app = express();
-app.use(cors());
+
+// Renderなどのリバースプロキシ配下では、これが無いと全リクエストが同じIP扱いになり
+// レート制限が実質機能しない。
+app.set("trust proxy", 1);
+
+// ---------- CORS: フロントのオリジンだけ許可 ----------
+// FRONTEND_ORIGIN はカンマ区切りで複数指定可(本番URL + ローカル開発用など)。
+// 未設定の場合は全許可にフォールバックする(ローカル検証用。本番では必ず設定すること)。
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // origin が undefined なのはサーバー間通信やcurlなど(ブラウザ由来ではない)。
+      if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "PUT", "DELETE", "POST"],
+  })
+);
+
 app.use(express.json({ limit: "2mb" }));
+
+// ---------- レート制限 ----------
+// ブロブCRUD: 通常の同期処理なので緩め
+const blobLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// AI分析: ローカルLLMでも計算資源を使うため、IP単位でも一定の歯止めをかける
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "リクエストが多すぎます。しばらくしてから再度お試しください。" },
+});
+
+// 外部API(Claude/GPT)利用: 匿名ID単位で1日の上限を設ける(サーバー側APIキーを
+// 全ユーザーで共有しているため、ここを絞らないと課金が青天井になり得る)。
+// 注意: メモリ内カウンタなのでインスタンス再起動でリセットされる。悪用が実際に
+// 増えるようならNeon側にai_usageテーブルを作って永続化すること。
+const externalApiUsage = new Map(); // anonId -> { count, resetAt }
+const EXTERNAL_API_DAILY_LIMIT = 10;
+
+function checkExternalApiQuota(anonId) {
+  const now = Date.now();
+  const entry = externalApiUsage.get(anonId);
+  if (!entry || now > entry.resetAt) {
+    externalApiUsage.set(anonId, { count: 1, resetAt: now + 24 * 60 * 60 * 1000 });
+    return true;
+  }
+  if (entry.count >= EXTERNAL_API_DAILY_LIMIT) return false;
+  entry.count += 1;
+  return true;
+}
 
 // プライバシー配慮: ボディを含まない最小限のアクセスログのみ出す
 app.use((req, res, next) => {
@@ -33,6 +97,8 @@ const pool = new Pool({
 app.get("/health", (req, res) => res.json({ ok: true }));
 
 // ---------- 暗号化ブロブの保存/取得 ----------
+
+app.use("/api/blobs", blobLimiter);
 
 // 保存(新規 or 上書き)
 app.put("/api/blobs/:anonId/:key", async (req, res) => {
@@ -151,9 +217,20 @@ app.get("/api/ai/status", async (req, res) => {
 
 // ---------- AI分析: ローカル優先、外部はオプトインのみ ----------
 
-app.post("/api/ai/analyze", async (req, res) => {
-  const { kind, payload, useExternal, provider } = req.body || {};
+app.post("/api/ai/analyze", aiLimiter, async (req, res) => {
+  const { kind, payload, useExternal, provider, anonId } = req.body || {};
   if (!payload) return res.status(400).json({ error: "payload is required" });
+
+  if (useExternal) {
+    if (!anonId) {
+      return res.status(400).json({ error: "外部APIを使う場合はanonIdが必要です" });
+    }
+    if (!checkExternalApiQuota(anonId)) {
+      return res.status(429).json({
+        error: `外部AIの利用回数上限(1日${EXTERNAL_API_DAILY_LIMIT}回)に達しました。しばらくしてから再度お試しください。`,
+      });
+    }
+  }
 
   const prompt = buildPrompt(kind, payload);
 
