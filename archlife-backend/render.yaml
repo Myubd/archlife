@@ -18,6 +18,8 @@ services:
   - type: web
     name: archlife-backend
     runtime: docker
+    rootDir: archlife-backend # render.yaml自体はarchlife-backend内にあるが、
+    # dockerfilePath/dockerContextはリポジトリルート基準で解決されるため、明示的に指定する。
     dockerfilePath: ./Dockerfile
     plan: free # 課金なしで動作確認するため。一定時間アクセスがないとスリープする点に注意。
     healthCheckPath: /health
@@ -50,6 +52,7 @@ services:
   # - type: pserv
   #   name: archlife-llm
   #   runtime: docker
+  #   rootDir: archlife-backend
   #   dockerfilePath: ./llm-service/Dockerfile
   #   dockerContext: ./llm-service
   #   plan: starter # CPUプラン。応答が遅い場合はより上位のプランを検討。
