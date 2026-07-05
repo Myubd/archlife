@@ -1,0 +1,43 @@
+# Render Blueprint (render.yaml)
+# https://render.com/docs/blueprint-spec
+#
+# このファイルをリポジトリのルートに置いて "New +" > "Blueprint" から読み込むと、
+# APIサーバーとローカルLLMサービスをまとめてデプロイできる。
+# Neonのデータベース接続文字列(DATABASE_URL)は、Renderが管理するDBではないため
+# ダッシュボード側で環境変数として手動設定する(下記 sync: false の項目)。
+
+services:
+  # ---- APIサーバー (公開) ----
+  - type: web
+    name: archlife-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false # NeonのConnection Stringをダッシュボードで設定する
+      - key: PGSSLMODE
+        value: require
+      - key: OLLAMA_URL
+        fromService:
+          type: pserv
+          name: archlife-llm
+          property: hostport
+      - key: OLLAMA_MODEL
+        # qwen3:8b は8Bパラメータで、starterプラン(CPUのみ・メモリも限られる)だと
+        # 応答がかなり遅い/メモリ不足で落ちる可能性がある。実用に耐えない場合は
+        # qwen2.5:1.5b-instruct(軽量モデル)に戻すか、上位プランを検討する。
+        value: qwen3:8b
+      - key: ANTHROPIC_API_KEY
+        sync: false # 外部APIを使う場合のみダッシュボードで設定。空なら常にローカルLLMのみ。
+      - key: OPENAI_API_KEY
+        sync: false
+
+  # ---- ローカルLLM (非公開。archlife-backendからのみ到達可能) ----
+  - type: pserv
+    name: archlife-llm
+    runtime: docker
+    dockerfilePath: ./llm-service/Dockerfile
+    dockerContext: ./llm-service
+    plan: starter # CPUプラン。応答が遅い場合はより上位のプランを検討。

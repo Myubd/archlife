@@ -1,0 +1,17 @@
+{
+  "name": "archlife-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ArchLifeOS backend: anonymous encrypted-blob storage + local-first AI dispatch",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "node-fetch": "^2.7.0",
+    "pg": "^8.12.0"
+  }
+}

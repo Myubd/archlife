@@ -1,0 +1,21 @@
+# 依存関係(各パッケージのpackage.jsonから再インストールできるため不要)
+node_modules/
+
+# 環境変数・秘密情報(APIキーやDB接続文字列が入るためコミットしない)
+.env
+.env.local
+.env.*.local
+
+# ビルド成果物
+dist/
+build/
+
+# OS/エディタ関連
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ログ
+*.log
+npm-debug.log*

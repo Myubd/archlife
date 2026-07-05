@@ -1,0 +1,36 @@
+name: Frontend CI
+
+# archlife-frontend 配下に変更があった push / PR で実行される
+on:
+  push:
+    branches: [main]
+    paths:
+      - "archlife-frontend/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "archlife-frontend/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: archlife-frontend
+
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+
+      - name: Node.jsをセットアップ
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: archlife-frontend/package-lock.json
+
+      - name: 依存関係をインストール
+        run: npm ci
+
+      - name: Viteビルド確認
+        run: npm run build

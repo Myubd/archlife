@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: archlife-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: archlife
+      POSTGRES_USER: archlife
+      POSTGRES_PASSWORD: archlife
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    ports:
+      - "5432:5432"
+
+  # ローカルAI(Ollama)は「ai」プロファイル配下にしてあり、既定の `docker compose up -d` には含まれない。
+  # AI機能(今日の提案・支出分析・習慣分析)を使いたい時だけ、以下で起動する:
+  #   docker compose --profile ai up -d --build
+  #   docker exec -it archlife-ollama ollama pull qwen3:8b
+  # AIタブを開かない/使わない場合は、このサービスを起動しなくてもアプリ本体(Todo・カレンダー・
+  # 習慣・日記・メモ・目標・家計簿・サブスク・資産)は問題なく動く。
+  ollama:
+    image: ollama/ollama:latest
+    container_name: archlife-ollama
+    restart: unless-stopped
+    profiles: ["ai"]
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  backend:
+    build: .
+    container_name: archlife-backend
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://archlife:archlife@db:5432/archlife
+      PGSSLMODE: disable
+      # ollamaコンテナが起動していなくても、接続失敗時にAPIがエラーを返すだけでbackend自体は正常に動く。
+      OLLAMA_URL: http://ollama:11434
+      # qwen3:8b は8Bパラメータのモデル。CPUのみだと応答がかなり遅くなる/メモリ不足で失敗することがある。
+      # 目安: 空きRAM 8GB以上推奨、GPUがあれば快適。非力な環境では qwen2.5:1.5b-instruct 等に戻すとよい。
+      OLLAMA_MODEL: qwen3:8b
+      # 外部APIを使う場合のみ設定(空でも動く。既定はローカルLLMのみ)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "8080:8080"
+
+volumes:
+  db_data:
+  ollama_data:
+
