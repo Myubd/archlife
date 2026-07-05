@@ -117,6 +117,7 @@ app.put("/api/blobs/:anonId/:key", async (req, res) => {
     );
     res.json({ ok: true });
   } catch (err) {
+    console.error("PUT /api/blobs error:", err);
     res.status(500).json({ error: "保存に失敗しました" });
   }
 });
@@ -132,6 +133,7 @@ app.get("/api/blobs/:anonId/:key", async (req, res) => {
     if (r.rows.length === 0) return res.status(404).json({ error: "not found" });
     res.json(r.rows[0]);
   } catch (err) {
+    console.error("GET /api/blobs/:anonId/:key error:", err);
     res.status(500).json({ error: "取得に失敗しました" });
   }
 });
@@ -146,6 +148,7 @@ app.get("/api/blobs/:anonId", async (req, res) => {
     );
     res.json(r.rows);
   } catch (err) {
+    console.error("GET /api/blobs/:anonId error:", err);
     res.status(500).json({ error: "一覧取得に失敗しました" });
   }
 });
@@ -157,6 +160,7 @@ app.delete("/api/blobs/:anonId/:key", async (req, res) => {
     await pool.query("DELETE FROM blobs WHERE anon_id = $1 AND item_key = $2", [anonId, key]);
     res.json({ ok: true });
   } catch (err) {
+    console.error("DELETE /api/blobs/:anonId/:key error:", err);
     res.status(500).json({ error: "削除に失敗しました" });
   }
 });
@@ -165,23 +169,33 @@ app.delete("/api/blobs/:anonId/:key", async (req, res) => {
 
 app.get("/api/ai-settings/:anonId", async (req, res) => {
   const { anonId } = req.params;
-  const r = await pool.query("SELECT allow_external_api, external_provider FROM ai_settings WHERE anon_id = $1", [anonId]);
-  if (r.rows.length === 0) {
-    return res.json({ allow_external_api: false, external_provider: "claude" });
+  try {
+    const r = await pool.query("SELECT allow_external_api, external_provider FROM ai_settings WHERE anon_id = $1", [anonId]);
+    if (r.rows.length === 0) {
+      return res.json({ allow_external_api: false, external_provider: "claude" });
+    }
+    res.json(r.rows[0]);
+  } catch (err) {
+    console.error("GET /api/ai-settings error:", err);
+    res.status(500).json({ error: "AI設定の取得に失敗しました" });
   }
-  res.json(r.rows[0]);
 });
 
 app.put("/api/ai-settings/:anonId", async (req, res) => {
   const { anonId } = req.params;
   const { allow_external_api, external_provider } = req.body || {};
-  await pool.query(
-    `INSERT INTO ai_settings (anon_id, allow_external_api, external_provider)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (anon_id) DO UPDATE SET allow_external_api = $2, external_provider = $3`,
-    [anonId, !!allow_external_api, external_provider || "claude"]
-  );
-  res.json({ ok: true });
+  try {
+    await pool.query(
+      `INSERT INTO ai_settings (anon_id, allow_external_api, external_provider)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (anon_id) DO UPDATE SET allow_external_api = $2, external_provider = $3`,
+      [anonId, !!allow_external_api, external_provider || "claude"]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("PUT /api/ai-settings error:", err);
+    res.status(500).json({ error: "AI設定の保存に失敗しました" });
+  }
 });
 
 // ---------- AI利用可否の確認(AIタブを開いた時だけフロントから呼ばれる軽量チェック) ----------
@@ -251,6 +265,7 @@ app.post("/api/ai/analyze", aiLimiter, async (req, res) => {
     }
     res.json({ text, source });
   } catch (err) {
+    console.error("POST /api/ai/analyze error:", err);
     res.status(502).json({ error: err.message || "AI呼び出しに失敗しました" });
   }
 });
