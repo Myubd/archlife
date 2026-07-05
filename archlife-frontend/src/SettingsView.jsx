@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Palette, Languages, Sparkles, ShieldCheck, Check, Image as ImageIcon, X } from "lucide-react";
 import { useTheme, useThemeControls, useBackgroundControls, DEFAULT_BG_OVERLAY } from "./theme.jsx";
 import { useLanguage, useT, LANGUAGES } from "./i18n.jsx";
@@ -138,6 +138,17 @@ export default function SettingsView() {
   const { lang, setLang } = useLanguage();
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [bgProcessing, setBgProcessing] = useState(false);
+  const [anonId, setAnonId] = useState("…");
+
+  useEffect(() => {
+    let cancelled = false;
+    getAnonId().then((id) => {
+      if (!cancelled) setAnonId(id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function handleResetPassphrase() {
     if (!confirmingReset) {
@@ -329,7 +340,7 @@ export default function SettingsView() {
             wordBreak: "break-all",
           }}
         >
-          {t("settings.anonId")}: {getAnonId()}
+          {t("settings.anonId")}: {anonId}
         </p>
         {confirmingReset && (
           <p style={{ fontFamily: FONT_BODY, fontSize: 11.5, color: COLORS.hanko, marginBottom: 8, lineHeight: 1.6 }}>

@@ -47,54 +47,51 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080
 // (元コードにあった window.storage はClaude.aiのアーティファクト専用の疑似APIで、
 //  通常のブラウザでは動かないため、実際のバックエンドと通信する実装に置き換えている)
 
-const ANON_ID_KEY = "archlife_anon_id";
 const PASSPHRASE_KEY = "archlife_passphrase"; // 端末内にのみ保存。サーバーには送らない。
-
-function getOrCreateAnonId() {
-  let id = localStorage.getItem(ANON_ID_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(ANON_ID_KEY, id);
-  }
-  return id;
-}
+// ドメイン分離用の固定文字列(秘密ではない。全ユーザー共通)。
+// これにより、同じパスフレーズからでも「匿名ID用の値」と「暗号化鍵」が
+// 異なる値として導出される。
+const APP_SALT = "archlife:v1";
 
 function getOrCreatePassphrase() {
   let p = localStorage.getItem(PASSPHRASE_KEY);
   if (!p) {
-    // Electron(file://)では window.prompt() が例外を投げたり何も表示せず失敗することがある。
-    // ここで処理が止まると暗号化キーが作れず、以降すべての保存/読み込みが無言で失敗してしまうため、
-    // 失敗時は既定のパスフレーズにフォールバックして必ず処理を継続させる。
-    let entered = null;
-    try {
-      entered = window.prompt(
+    p =
+      window.prompt(
         "初回設定: データを暗号化するためのパスフレーズを決めてください。\n(忘れると復元できません。他の端末と同期したい場合は同じものを使ってください)"
-      );
-    } catch (err) {
-      entered = null;
-    }
-    p = entered || "please-change-this-passphrase";
+      ) || "please-change-this-passphrase";
     localStorage.setItem(PASSPHRASE_KEY, p);
   }
   return p;
 }
 
-async function deriveKey(passphrase, saltStr) {
-  const salt = new TextEncoder().encode(saltStr);
+// パスフレーズだけから「匿名ID」と「AES-GCM暗号化鍵」を1回のPBKDF2で導出する。
+// 従来は匿名IDを端末のlocalStorageにランダム生成して保存していたため、
+// 同じパスフレーズを別端末/別ブラウザで入力してもデータを復元できなかった。
+// この方式なら、同じパスフレーズであれば常に同じ匿名IDに辿り着くため、
+// 端末を変えてもパスフレーズさえ覚えていればデータにアクセスできる。
+async function deriveIdentity(passphrase) {
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(passphrase),
     "PBKDF2",
     false,
-    ["deriveKey"]
+    ["deriveBits"]
   );
-  return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: 150000, hash: "SHA-256" },
+  // 48byte = 匿名ID用16byte + AES-256鍵用32byte
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt: new TextEncoder().encode(APP_SALT), iterations: 150000, hash: "SHA-256" },
     keyMaterial,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"]
+    48 * 8
   );
+  const bytes = new Uint8Array(bits);
+  const idBytes = bytes.slice(0, 16);
+  const keyBytes = bytes.slice(16);
+  const anonId = Array.from(idBytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  const cryptoKey = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt", "decrypt"]);
+  return { anonId, cryptoKey };
 }
 
 function bufToB64(buf) {
@@ -122,15 +119,16 @@ async function decryptJSON(key, { iv, ciphertext }) {
   return JSON.parse(new TextDecoder().decode(plainBuf));
 }
 
-const anonId = getOrCreateAnonId();
-let cryptoKeyPromise = null;
-function getCryptoKey() {
-  if (!cryptoKeyPromise) cryptoKeyPromise = deriveKey(getOrCreatePassphrase(), anonId);
-  return cryptoKeyPromise;
+let identityPromise = null;
+function getIdentity() {
+  if (!identityPromise) identityPromise = deriveIdentity(getOrCreatePassphrase());
+  return identityPromise;
 }
 
-// 設定ページ(データ/プライバシー欄)から参照するための公開関数
-export function getAnonId() {
+// 設定ページ(データ/プライバシー欄)から参照するための公開関数。
+// 導出に時間がかかる(PBKDF2)ため非同期。呼び出し側はuseEffect等でawaitすること。
+export async function getAnonId() {
+  const { anonId } = await getIdentity();
   return anonId;
 }
 export function resetPassphrase() {
@@ -140,7 +138,7 @@ export function resetPassphrase() {
 
 const storage = {
   async get(key) {
-    const cryptoKey = await getCryptoKey();
+    const { anonId, cryptoKey } = await getIdentity();
     const r = await fetch(`${API_BASE_URL}/api/blobs/${anonId}/${encodeURIComponent(key)}`);
     if (r.status === 404) throw new Error("not found");
     if (!r.ok) throw new Error(`取得に失敗しました (status ${r.status})`);
@@ -149,7 +147,7 @@ const storage = {
     return { key, value: JSON.stringify(value) };
   },
   async set(key, value) {
-    const cryptoKey = await getCryptoKey();
+    const { anonId, cryptoKey } = await getIdentity();
     const obj = typeof value === "string" ? JSON.parse(value) : value;
     const enc = await encryptJSON(cryptoKey, obj);
     const r = await fetch(`${API_BASE_URL}/api/blobs/${anonId}/${encodeURIComponent(key)}`, {
@@ -234,10 +232,11 @@ async function runOnDevice(prompt, onProgress) {
 }
 
 async function callBackendAi({ kind, payload, useExternal, provider }) {
+  const { anonId } = await getIdentity();
   const r = await fetch(`${API_BASE_URL}/api/ai/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind, payload, useExternal, provider }),
+    body: JSON.stringify({ kind, payload, useExternal, provider, anonId }),
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || `APIエラー (status ${r.status})`);
