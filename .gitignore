@@ -1,21 +1,70 @@
-# 依存関係(各パッケージのpackage.jsonから再インストールできるため不要)
+# ============================================================
+# archlife .gitignore
+# Python(archlife-fastapi) + Node(archlife-frontend, electron-app) 混在用
+# ============================================================
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 仮想環境(どのapp配下にあっても無視)
+venv/
+.venv/
+env/
+ENV/
+
+# ---- ローカルDB(SQLite) ----
+# 個人のPCに保存されるユーザーデータなので、絶対にコミットしない
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+db/*.db
+
+# ---- Node / フロントエンド / Electron ----
 node_modules/
-
-# 環境変数・秘密情報(APIキーやDB接続文字列が入るためコミットしない)
-.env
-.env.local
-.env.*.local
-
-# ビルド成果物
 dist/
 build/
+.vite/
+*.local
+electron-app/dist/
+electron-app/out/
+electron-app/release/
 
-# OS/エディタ関連
+# ---- 環境変数・秘密情報 ----
+# APIキー等が入るファイルは絶対に無視する
+.env
+.env.*
+!.env.example
+
+# ---- OS / エディタ ----
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+*.swp
 
-# ログ
+# ---- ログ・一時ファイル ----
 *.log
-npm-debug.log*
+tmp/
+temp/
+
+# ---- ビルド成果物(PyInstaller/Electron Builder等) ----
+*.spec.bak
+*.bak
+/dist/
+/build/
+*.exe
+*.msi
+
+# ---- 相談・共有用に作った圧縮ファイル ----
+# (友人への共有等で一時的に作ったzip。配布物として明示的に管理したい場合はこの行を消す)
+*.zip
