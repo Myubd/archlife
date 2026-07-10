@@ -47,6 +47,7 @@ if not defined NEW_TAG ( echo Invalid input. & pause & exit /b 1 )
 echo.
 echo New tag: %NEW_TAG%
 echo.
+echo NOTE: Type your commit message WITHOUT surrounding quotes.
 set /p COMMIT_MSG=Commit message (blank to skip): 
 
 echo.
@@ -60,9 +61,16 @@ if /i not "%CONFIRM%"=="y" ( echo Cancelled. & pause & exit /b 0 )
 
 echo.
 if not "%COMMIT_MSG%"=="" (
+    rem Write the commit message to a temp file and use "git commit -F" instead
+    rem of "git commit -m "%COMMIT_MSG%"". This avoids cmd.exe parser crashes
+    rem when the message contains quotes, parentheses, or other special chars
+    rem inside this parenthesized if-block.
+    set "COMMIT_MSG_FILE=%TEMP%\release_commit_msg_%RANDOM%.txt"
+    > "!COMMIT_MSG_FILE!" echo(!COMMIT_MSG!
     echo [1/4] Committing...
     git add .
-    git commit -m "%COMMIT_MSG%"
+    git commit -F "!COMMIT_MSG_FILE!"
+    del "!COMMIT_MSG_FILE!" >nul 2>&1
 ) else (
     echo [1/4] Skipping commit.
 )
