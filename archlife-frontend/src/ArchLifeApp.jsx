@@ -56,10 +56,10 @@ const APP_SALT = "archlife:v1";
 function getOrCreatePassphrase() {
   let p = localStorage.getItem(PASSPHRASE_KEY);
   if (!p) {
-    p =
-      window.prompt(
-        "初回設定: データを暗号化するためのパスフレーズを決めてください。\n(忘れると復元できません。他の端末と同期したい場合は同じものを使ってください)"
-      ) || "please-change-this-passphrase";
+    // [変更] window.prompt() はElectronのBrowserWindowで動作しないため、
+    // 自動生成に変更。将来、端末間同期機能を作る際は、ここではなく
+    // 専用のUI画面から明示的にパスフレーズを入力・変更できるようにする。
+    p = crypto.randomUUID() + "-" + crypto.randomUUID();
     localStorage.setItem(PASSPHRASE_KEY, p);
   }
   return p;

@@ -2,7 +2,7 @@
   "name": "archlifeos-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "ArchLifeOS デスクトップ版(Electron)。ダブルクリックだけでインストール・起動できるようにする配布用ラッパー。",
+  "description": "ArchLifeOS デスクトップ版(Electron)。ダブルクリックだけでインストール・起動できるようにする配布用ラッパー。バックエンドはFastAPI(PyInstallerでexe化)をサブプロセスとして起動する。",
   "author": "Myubd",
   "repository": {
     "type": "git",
@@ -26,9 +26,9 @@
     "files": ["main.js"],
     "extraResources": [
       {
-        "from": "../archlife-backend",
-        "to": "archlife-backend",
-        "filter": ["**/*", "!.env", "!.env.local", "!data/**"]
+        "from": "../archlife-fastapi/dist/launch_fastapi",
+        "to": "archlife-fastapi",
+        "filter": ["**/*", "!*.db", "!*.db-journal"]
       },
       {
         "from": "../archlife-frontend/dist",

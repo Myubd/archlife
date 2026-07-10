@@ -52,6 +52,20 @@ async def _minimal_access_log(request, call_next):
 def _startup() -> None:
     db.init_db(os.environ.get("ARCHLIFE_DB_PATH", "archlife.db"))
 
+    # 共通データ基盤(core.db)への参加。anon_id/blobs等のArchlife固有データは
+    # 引き続き上のdb.init_db()が管理するarchlife.dbに残す。ここで行うのは
+    # 「共通スキーマの初期化」「共通のdevice_identity/profileの確保」
+    # 「plugin_manifest.jsonの申告」のみで、これらは全アプリで同じ
+    # local_ai_core.paths のパスを指すため、interview_appと同じprofileを共有する。
+    # 失敗してもArchlife本来の機能(暗号化データの保存/取得)には影響させない。
+    try:
+        from core_sync import bootstrap as core_bootstrap
+
+        profile_id = core_bootstrap()
+        logger.info("core_sync bootstrap done (profile_id=%s)", profile_id)
+    except Exception:
+        logger.exception("core_sync bootstrap failed (continuing without it)")
+
 
 llm_router = LLMRouter(
     local=OllamaProvider(
