@@ -1972,15 +1972,64 @@ function ArchLifeAppInner() {
   const persistSubscriptions = persist("lifeos:subscriptions", setSubscriptions);
   const persistAssets = persist("lifeos:assets", setAssets);
 
+  // 共通データ基盤(local-ai-core)との連携: todosをアプリ横断の予定/タスク台帳
+  // (schedule_items)にも反映する。
+  //
+  // 【重要】これは /api/blobs (暗号化保存)とは完全に別経路。ここでバックエンドへ
+  // 送る内容は暗号化されない平文だが、送るのは「同期のための要約」(id/タイトル/
+  // 期限/完了状態)のみで、todos本体の永続化は従来通り persistTodos 内の
+  // storage.set が担う。この関数が失敗しても、todos保存自体には一切影響しない
+  // (fire-and-forgetで、awaitせず・エラーも画面に出さない)。
+  const syncTodosToCore = useCallback((nextTodos) => {
+    fetch(`${API_BASE_URL}/api/core-sync/todos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        todos: nextTodos.map((t) => ({ id: t.id, text: t.text, done: !!t.done, date: t.date ?? null })),
+      }),
+    }).catch(() => {
+      // 同期の失敗はユーザーに見せない。todos機能は暗号化ストレージ側だけで完結している。
+    });
+  }, []);
+
+  // goals(目標)も同様に knowledge_items へ同期する。diary/memosは自由記述で
+  // 機微度が高いため、現時点では意図的に同期対象から外している
+  // (詳細は archlife-fastapi/core_sync/knowledge_sync.py のコメント参照)。
+  const syncGoalsToCore = useCallback((nextGoals) => {
+    fetch(`${API_BASE_URL}/api/core-sync/goals`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        goals: nextGoals.map((g) => ({ id: g.id, title: g.title, progress: g.progress ?? 0 })),
+      }),
+    }).catch(() => {});
+  }, []);
+
+  // 起動時の読み込みが終わったタイミングで一度だけ同期しておく
+  // (前回のセッション以降、共通基盤側の状態と食い違っていないことを保証するため)。
+  useEffect(() => {
+    if (ready) {
+      syncTodosToCore(todos);
+      syncGoalsToCore(goals);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
   // Todo
   function addTodo(text) {
-    persistTodos([...todos, { id: crypto.randomUUID(), text, done: false, date: todayKey() }]);
+    const next = [...todos, { id: crypto.randomUUID(), text, done: false, date: todayKey() }];
+    persistTodos(next);
+    syncTodosToCore(next);
   }
   function toggleTodo(id) {
-    persistTodos(todos.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+    const next = todos.map((t) => (t.id === id ? { ...t, done: !t.done } : t));
+    persistTodos(next);
+    syncTodosToCore(next);
   }
   function deleteTodo(id) {
-    persistTodos(todos.filter((t) => t.id !== id));
+    const next = todos.filter((t) => t.id !== id);
+    persistTodos(next);
+    syncTodosToCore(next);
   }
 
   // 習慣
@@ -2019,17 +2068,21 @@ function ArchLifeAppInner() {
 
   // 目標
   function addGoal(title) {
-    persistGoals([...goals, { id: crypto.randomUUID(), title, progress: 0 }]);
+    const next = [...goals, { id: crypto.randomUUID(), title, progress: 0 }];
+    persistGoals(next);
+    syncGoalsToCore(next);
   }
   function updateProgress(id, delta) {
-    persistGoals(
-      goals.map((g) =>
-        g.id === id ? { ...g, progress: Math.max(0, Math.min(100, g.progress + delta)) } : g
-      )
+    const next = goals.map((g) =>
+      g.id === id ? { ...g, progress: Math.max(0, Math.min(100, g.progress + delta)) } : g
     );
+    persistGoals(next);
+    syncGoalsToCore(next);
   }
   function deleteGoal(id) {
-    persistGoals(goals.filter((g) => g.id !== id));
+    const next = goals.filter((g) => g.id !== id);
+    persistGoals(next);
+    syncGoalsToCore(next);
   }
 
   // 家計簿

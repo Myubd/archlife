@@ -18,7 +18,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from local_ai_core import bootstrap_app
+from local_ai_core.bootstrap import bootstrap_app  # NOTE: `from local_ai_core import bootstrap_app`
+# ではなく必ずこの書き方にすること。backend/local_ai_core/ (submoduleのルート、
+# __init__.pyを持たない)がPythonの名前空間パッケージとして`local_ai_core`を
+# 名乗ってしまい、site-packages側の正しい `local_ai_core` パッケージと
+# マージされる。サブモジュール(.memory, .permissions 等)は名前空間パッケージ
+# 越しでも見えるが、`local_ai_core/__init__.py` 経由で再exportされる名前
+# (bootstrap_app 等)は名前空間パッケージでは実行されないため見えなくなる。
 from local_ai_core.paths import get_core_db_path
 from local_ai_core.permissions import PermissionGate
 

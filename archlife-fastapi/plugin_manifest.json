@@ -18,6 +18,14 @@
     {
       "scope": "memory:write:life.*",
       "purpose": "睡眠・活動パターンの推測結果を他アプリと共有するため"
+    },
+    {
+      "scope": "knowledge_items:write",
+      "purpose": "ユーザーが設定した目標(タイトルと進捗)を共通ナレッジ台帳に保存するため"
+    },
+    {
+      "scope": "knowledge_items:read",
+      "purpose": "他アプリが登録したナレッジも含めて、将来的に横断検索・表示するため"
     }
   ]
 }

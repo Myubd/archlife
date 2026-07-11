@@ -34,6 +34,8 @@ from local_ai_core.llm import (
 )
 from local_ai_core.prompts import PromptRegistry, PromptTemplate, guards
 
+from core_sync import sync_todos, list_cross_app_schedule, sync_goals
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("archlife")
 
@@ -156,6 +158,72 @@ def delete_blob(anon_id: str, key: str):
     except Exception:
         raise HTTPException(status_code=500, detail="削除に失敗しました")
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# 共通データ基盤(local-ai-core)との連携: todos ⇔ schedule_items
+#
+# 【重要】このエンドポイントは暗号化ストレージ(/api/blobs)とは完全に別経路。
+# バックエンドは相変わらずtodosの中身を保存目的では復号しない。ここに来る
+# リクエストボディは、フロントエンドが「同期のためだけに」明示的に平文で
+# 送ってくるものであり、/api/blobs に保存される暗号文とは独立している。
+# 同期に失敗しても、todos本体の保存(/api/blobs経由)には一切影響しない。
+# ---------------------------------------------------------------------------
+
+class TodoSyncItem(BaseModel):
+    id: str
+    text: str
+    done: bool = False
+    date: str | None = None
+
+
+class TodoSyncBody(BaseModel):
+    todos: list[TodoSyncItem]
+
+
+@app.post("/api/core-sync/todos")
+def post_core_sync_todos(body: TodoSyncBody):
+    try:
+        sync_todos([t.model_dump() for t in body.todos])
+    except Exception:
+        logger.exception("core_sync todos sync failed (todos機能自体には影響なし)")
+        # 同期は失敗してもtodos本来の保存には影響させない方針のため、
+        # クライアントには成功扱いで返す(UIをエラー表示で煩わせない)。
+        return {"ok": False, "synced": False}
+    return {"ok": True, "synced": True}
+
+
+@app.get("/api/core-sync/schedule")
+def get_core_sync_schedule():
+    """他アプリ(interview_app等)発の予定も含めた、未完了の予定/タスク一覧。
+
+    権限が許可されていない場合は空リストを返す(エラーにしない)。
+    """
+    try:
+        return {"items": list_cross_app_schedule()}
+    except Exception:
+        logger.exception("core_sync schedule fetch failed")
+        return {"items": []}
+
+
+class GoalSyncItem(BaseModel):
+    id: str
+    title: str
+    progress: int = 0
+
+
+class GoalSyncBody(BaseModel):
+    goals: list[GoalSyncItem]
+
+
+@app.post("/api/core-sync/goals")
+def post_core_sync_goals(body: GoalSyncBody):
+    try:
+        sync_goals([g.model_dump() for g in body.goals])
+    except Exception:
+        logger.exception("core_sync goals sync failed (goals機能自体には影響なし)")
+        return {"ok": False, "synced": False}
+    return {"ok": True, "synced": True}
 
 
 # ---------------------------------------------------------------------------
